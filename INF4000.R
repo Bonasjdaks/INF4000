@@ -32,13 +32,460 @@ View(filterd_spotify)
 
 
 
+i_p_genres <- c("indie", "j-idol")
+
+#filter them into new variable
+ip_filter <- filterd_spotify %>%
+  filter(track_genre %in% i_p_genres)
+
+col_pallete2 <- c("indie" = "#00A4CCFF", "j-idol" = "#F95700FF")
+
+
+#scatter Plot
+ggplot(ip_filter, aes(x=energy, y=loudness, colour = track_genre))+
+  geom_point() +
+  scale_colour_manual(values = col_pallete2) +
+  labs(title = "Scatterplot of Popularity against Energy for two genres (J-Idol and Indie)") +
+    theme(plot.title = element_text(size = 16, face = "bold"),
+  axis.title.x = element_text(size = 20),
+  axis.title.y = element_text(size = 16),
+  axis.text.x = element_text(size = 18),
+  axis.text.y = element_text(size = 18),
+  legend.title = element_text(size = 16),
+  legend.text = element_text(size = 16)
+  )
+
+
+
+
+#Fourth Plot
+#sentiment analysis maybe sad music names has sadder words than pop?
+
+indie <- filterd_spotify %>% filter(track_genre %in% c("indie"))
+indie <- indie %>% select(Column5 = 5)
+indie <- indie %>% rename(track_name = Column5)
+words_remove <- c("feat.", "feat")
+
+
+
+#split into words
+indie_t <- indie %>% unnest_tokens(word, track_name)
+
+#clean up the data
+indie_tc <- indie_t %>%
+  filter(!word %in% tolower(words_remove))
+
+#remove stopwords
+indie_tc2 <- indie_tc %>%
+  anti_join(stop_words, by = "word")
+
+
+
+
+#same sentiment analysis but for party songs
+idol <- filterd_spotify %>% filter(track_genre %in% c("j-idol"))
+idol <- idol %>% select(Column5 = 5)
+idol <- idol %>% rename(track_name = Column5)
+words_remove <- c("feat.", "feat")
+
+#split into words
+idol_t <- idol %>% unnest_tokens(word, track_name)
+
+#clean up the data
+idol_tc <- idol_t %>%
+  filter(!word %in% tolower(words_remove))
+
+#remove stopwords
+idol_tc2 <- idol_tc %>%
+  anti_join(stop_words, by = "word")
+
+
+
+
+
+#sentiment analysis using NRC
+nrc_lexicon <- get_sentiments("nrc")
+
+sentiment_analysis <- indie_tc2 %>%
+  inner_join(nrc_lexicon, by = "word")
+
+
+
+emotion_indie <- sentiment_analysis %>%
+  count(sentiment) %>%
+  arrange(desc(n))
+
+#J-Idol sentiment analysis
+
+sentiment_analysis <- idol_tc2 %>%
+  inner_join(nrc_lexicon, by = "word")
+
+
+emotion_idol <- sentiment_analysis %>%
+  count(sentiment) %>%
+  arrange(desc(n))
+
+#count of each emotion
+print(emotion_idol)
+
+
+
+
+#grouped bar chart
+total_sum <- sum(emotion_indie$n)
+total_sum3 <- sum(emotion_idol$n)
+
+
+
+#New collumn with percentages
+emotion_indie$percentage <- (emotion_indie$n / total_sum) * 100
+emotion_indie <- emotion_indie %>% select(-2)
+
+emotion_idol$percentage <- (emotion_idol$n / total_sum3) * 100
+emotion_idol <- emotion_idol %>% select(-2)
+
+
+
+merged_em <- merge(emotion_indie, emotion_idol, by = "sentiment", suffixes = c("_indie", "_j-idol"))
+colnames(merged_em) <- c("sentiment", ".indie", ".J-Idol")
+
+
+#transforming the data
+
+merged_em_long <- merged_em %>%
+  pivot_longer(cols = starts_with("."),  
+               names_to = "group",           
+               values_to = "count")          
+
+
+color_pal <- c(".J-Idol" = "#F95700FF", ".indie" = "#00A4CCFF")
+
+ggplot(merged_em_long, aes(x = count, y = sentiment, fill = group)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = color_pal, name = "Genres", labels =c(".J-Idol"="J-Idol",".indie"="Indie")) +
+  theme_minimal() +
+  labs(x = "Percentage of words (%)", y = "Emotion", fill = "Genre", title = "Grouped Bar Chart Sentiment of words in song titles by genre using the NRC lexicon") +
+  theme(plot.title = element_text(size = 18, face = "bold"),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 18),
+        axis.text.x = element_text(size = 18),
+        axis.text.y = element_text(size = 18),
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 16)
+  )
+
+
+
+
+
+col_pal_box <- c("j-idol" = "#F95700FF", "indie" = "#00A4CCFF")
+
+
+#boxplot
+
+box_filter <- ip_filter
+
+box_filter$duration_ms <- box_filter$duration_ms/1000
+
+
+
+ggplot(box_filter, aes(x = factor(track_genre), y = duration_ms, fill = track_genre)) +
+  geom_boxplot() +
+  scale_fill_manual(name = "Genres", values = col_pal_box, labels =c("j-idol"="J-Idol","indie"="Indie")) +
+  labs(title = "Boxplot of Indie and J-Idol Music by Duration of songs",
+       x = "Genres",
+       y = "Duration (Seconds)") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 16, face = "bold"),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 20),
+        axis.text.y = element_text(size = 16),
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 16)
+  )
+
+summary_stats <- box_filter %>%
+  group_by(track_genre) %>%
+  summarise(
+    Median = median(duration_ms),
+    Q1 = quantile(duration_ms, 0.25),
+    Q3 = quantile(duration_ms, 0.75),
+    Min = min(duration_ms),
+    Max = max(duration_ms),
+    IQR = IQR(duration_ms)
+  )
+print(summary_stats)
+
+#density plot
+ggplot(ip_filter, aes(x = popularity, fill = (track_genre))) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(name = "Genres", values = col_pal_box, labels =c("j-idol"="J-Idol","indie"="Indie")) +
+  labs(title = "Density Plot of Sad and J-Idol Music by Popularity of songs",
+       x = "Popularity",
+       y = "Density") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 16, face = "bold"),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 20),
+        axis.text.y = element_text(size = 16),
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 16)
+  )
+
+
+#Overlapping Hisotgram
+col_outline <- c("j-idol" = "black", "indie" = "black")
+
+
+ggplot(ip_filter, aes(x = popularity, fill = track_genre, colour = track_genre)) +
+  geom_histogram(alpha = 0.5, position = "identity", bins = 40) +
+  scale_fill_manual(name = "Genres", values = col_pal_box, labels =c("j-idol"="J-Idol","indie"="Indie")) +
+  scale_color_manual(values = col_outline, guide = "none") +
+  labs(title = "Histogram of Indie and J-Idol Music by Popularity of songs",
+       x = "Popularity",
+       y = "Frequency") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 16, face = "bold"),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 20),
+        axis.text.y = element_text(size = 16),
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 16)
+  )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#sad vs J-Idol
+#Data Visualisation INF4000
+
+
+
 s_p_genres <- c("sad", "j-idol")
 
 #filter them into new variable
 sp_filter <- filterd_spotify %>%
   filter(track_genre %in% s_p_genres)
 
-col_pal <- c("sad" = "#00A4CCFF", "j-idol" = "#F95700FF")
+col_pal <- c("sad" = "#00A4CCFF", "j-idol" = "pink")
 
 #First Plot
 
@@ -55,7 +502,7 @@ ggplot(cor_data, aes(x = Var1, y = Var2, fill = value)) +
                        values = scales::rescale(c(-1, 0, 0.99, 1)),
                        limits = c(-0.99, 1)) +
   geom_text(aes(label = round(value, 2)), color = "black", size = 4) + 
-  labs(title = "Correlation Heatmap of 17 varibles (Sad and J-idol)",
+  labs(title = "Correlation Heatmap of 17 Variables (Sad and J-idol)",
        x = "Variables",
        y = "Variables",
        fill = "Correlation") +
@@ -73,24 +520,25 @@ ggplot(cor_data, aes(x = Var1, y = Var2, fill = value)) +
 
 
 #second Plot
-ggplot(sp_filter, aes(x=popularity, y=energy, colour = track_genre))+
+ggplot(sp_filter, aes(x=energy, y=loudness, colour = track_genre))+
   geom_point() +
   scale_colour_manual(values = col_pal) +
+  labs(title = "Scatterplot of Popularity against Energy for two genres (J-Idol and Sad)") +
   theme(plot.title = element_text(size = 16, face = "bold"),
-axis.title.x = element_text(size = 20),
-axis.title.y = element_text(size = 16),
-axis.text.x = element_text(size = 20),
-axis.text.y = element_text(size = 18),
-legend.title = element_text(size = 16),
-legend.text = element_text(size = 16)
-)
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 18),
+        axis.text.y = element_text(size = 18),
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 16)
+  )
 
 
 
 #Third Plot
 
 sp_PCA <- prcomp(sp_filter[, c("loudness", "energy", "acousticness", "popularity", "danceability", "speechiness", "instrumentalness",
-                                    "liveness", "valence", "tempo")], center = TRUE, scale. = TRUE)
+                               "liveness", "valence", "tempo")], center = TRUE, scale. = TRUE)
 
 
 sp_group <- factor(sp_filter$track_genre)
@@ -103,7 +551,7 @@ ggbiplot(sp_PCA,
          labels = rownames(data), 
          var.axes = TRUE) +
   scale_color_manual(name = "Genre", values = col_pal) +
-  ggtitle("Principle Component Analysis of Genre Variation between j-idol and sad music Genres") +
+  ggtitle("Principle Component Analysis of Genre Variation between J-idol and Sad music Genres") +
   theme(plot.title = element_text(size = 16, face = "bold"),
         axis.title.x = element_text(size = 20),
         axis.title.y = element_text(size = 16),
@@ -231,7 +679,7 @@ sentiment_analysis3$percentage <- (sentiment_analysis3$n / total_sum3) * 100
 sentiment_analysis3 <- sentiment_analysis3 %>% select(-2)
 colnames(sentiment_analysis3)[2] <- "All_percentage"
 
-merged_sent <- merge(sad_sentiment, party_sentiment, by = "sentiment")
+merged_sent <- merge(sad_sentiment, idol_sentiment, by = "sentiment")
 merged_sent <- merge(merged_sent, sentiment_analysis3, by = "sentiment")
 colnames(merged_sent) <- c("sentiment", ".Sad", ".J-Idol", ".All")
 
@@ -244,7 +692,7 @@ merged_sent_long <- merged_sent %>%
                values_to = "count")          
 
 
-color_pal <- c(".All" = "lightgrey", ".J-Idol" = "#F95700FF", ".Sad" = "#00A4CCFF")
+color_pal <- c(".All" = "lightgrey", ".J-Idol" = "pink", ".Sad" = "#00A4CCFF")
 
 
 ggplot(merged_sent_long, aes(x = sentiment, y = count, fill = group)) +
@@ -296,17 +744,6 @@ emotion_all <- sentiment_analysis %>%
 print(emotion_all)
 
 
-
-
-
-
-
-
-
-
-
-
-
 sentiment_analysis <- idol_tc2 %>%
   inner_join(nrc_lexicon, by = "word")
 
@@ -348,18 +785,107 @@ merged_em_long <- merged_em %>%
                values_to = "count")          
 
 
-color_pal <- c(".J-Idol" = "#F95700FF", ".Sad" = "#00A4CCFF")
+color_pal <- c(".J-Idol" = "pink", ".Sad" = "#00A4CCFF")
 
-ggplot(merged_em_long, aes(x = sentiment, y = count, fill = group)) +
+ggplot(merged_em_long, aes(x = count, y = sentiment, fill = group)) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = color_pal, name = "Genres", labels =c(".J-Idol"="J-Idol",".Sad"="Sad")) +
   theme_minimal() +
-  labs(x = "Emotion", y = "Percentage of Words (%)", fill = "Genre", title = "Grouped Bar Chart Sentiment of words in song titles by genre using the NRC lexicon") +
+  labs(x = "Percentage of words (%)", y = "Emotion", fill = "Genre", title = "Grouped Bar Chart Sentiment of words in song titles by genre using the NRC lexicon") +
   theme(plot.title = element_text(size = 16, face = "bold"),
         axis.title.x = element_text(size = 20),
         axis.title.y = element_text(size = 16),
-        axis.text.x = element_text(size = 20, angle = 45, hjust = 1),
+        axis.text.x = element_text(size = 18),
+        axis.text.y = element_text(size = 18),
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 16)
+  )
+
+
+col_pal_box <- c("j-idol" = "pink", "sad" = "#00A4CCFF")
+
+
+#boxplot
+
+box_filter <- sp_filter
+
+box_filter$duration_ms <- box_filter$duration_ms/1000
+
+
+
+ggplot(box_filter, aes(x = factor(track_genre), y = duration_ms, fill = track_genre)) +
+  geom_boxplot() +
+  scale_fill_manual(name = "Genres", values = col_pal_box, labels =c("j-idol"="J-Idol","sad"="Sad")) +
+  labs(title = "Boxplot of Sad and J-Idol Music by Duration of songs",
+       x = "Genres",
+       y = "Duration (Seconds)") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 16, face = "bold"),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 20),
         axis.text.y = element_text(size = 16),
         legend.title = element_text(size = 16),
         legend.text = element_text(size = 16)
   )
+
+
+#density plot
+ggplot(sp_filter, aes(x = popularity, fill = (track_genre))) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(name = "Genres", values = col_pal_box, labels =c("j-idol"="J-Idol","sad"="Sad")) +
+  labs(title = "Density Plot of Sad and J-Idol Music by Popularity of songs",
+       x = "Popularity",
+       y = "Density") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 16, face = "bold"),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 20),
+        axis.text.y = element_text(size = 16),
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 16)
+  )
+
+
+#Overlapping Hisotgram
+col_outline <- c("j-idol" = "black", "sad" = "black")
+
+
+ggplot(sp_filter, aes(x = popularity, fill = track_genre, colour = track_genre)) +
+  geom_histogram(alpha = 0.5, position = "identity", bins = 30) +
+  scale_fill_manual(name = "Genres", values = col_pal_box, labels =c("j-idol"="J-Idol","sad"="Sad")) +
+  scale_color_manual(values = col_outline, guide = "none") +
+  labs(title = "Histogram of Sad and J-Idol Music by Popularity of songs",
+       x = "Popularity",
+       y = "Frequency") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 16, face = "bold"),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 20),
+        axis.text.y = element_text(size = 16),
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 16)
+  )
+
+
+#misleading histogram
+ggplot(sp_filter, aes(x = popularity, fill = track_genre, colour = track_genre)) +
+  geom_histogram(alpha = 0.5, position = "identity", bins = 10) +
+  scale_fill_manual(name = "Genres", values = col_pal_box, labels =c("j-idol"="J-Idol","sad"="Sad")) +
+  scale_color_manual(values = col_outline, guide = "none") +
+  labs(title = "Histogram of Sad and J-Idol Music by Popularity of songs",
+       x = "Popularity",
+       y = "Frequency") +
+  theme_minimal() +
+  coord_cartesian(xlim = c(0, 100), ylim = c(200, 10000)) +
+  theme(plot.title = element_text(size = 16, face = "bold"),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 16),
+        axis.text.x = element_text(size = 20),
+        axis.text.y = element_text(size = 16),
+        legend.title = element_text(size = 16),
+        legend.text = element_text(size = 16)
+  )
+
